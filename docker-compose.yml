@@ -1,0 +1,25 @@
+version: '3.1'
+
+services:
+
+  database:
+    image: ${DATABASE_IMAGE}
+    container_name: ${DATABASE_CONTAINER_NAME}
+    ports:
+      - ${DATABASE_CONTAINER_PORT}
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: ${DATABASE}
+    volumes:
+       - ./mongodb/diet_data:/data/db
+
+  # server:
+  #   container_name: ${SERVER_CONTAINER_NAME}
+  #   build:  
+  #     context: ./server
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - ${SERVER_CONTAINER_PORT}
+  #   restart: always
+  #   depends_on:
+  #     - database

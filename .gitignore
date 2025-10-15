@@ -1,0 +1,6 @@
+*.env
+__pycache__/
+
+.venv
+
+mongodb/diet_data/
