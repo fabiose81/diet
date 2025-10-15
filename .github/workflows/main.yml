@@ -50,7 +50,7 @@ jobs:
 
   aws_ecr_repository:
     name: Push Docker image to AWS ECR Repository
-    needs: build
+    needs: test
     runs-on: ubuntu-latest
 
     env:
