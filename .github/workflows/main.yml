@@ -50,7 +50,7 @@ jobs:
 
   docker_hub:
     name: Push Docker image to Docker Hub
-    needs: build
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
