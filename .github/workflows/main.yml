@@ -1,4 +1,4 @@
-name: Build, Test, Push to AWS ECR Repository
+name: Test, Build, Create Docker image and Push to AWS ECR Repository
 
 on:
   push:
