@@ -5,7 +5,8 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /server
 
-COPY server/requirements.txt .
+COPY requirements.txt .
+# COPY server/requirements.txt .
 
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
