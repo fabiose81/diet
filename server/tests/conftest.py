@@ -1,7 +1,7 @@
 import pytest
 from pymongo import MongoClient
 from testcontainers.mongodb import MongoDbContainer
-from server.server import create_server
+from server.app import create_server
 
 @pytest.fixture(scope="session")
 def mongo_container():

@@ -13,13 +13,12 @@ services:
     volumes:
        - ./mongodb/diet_data:/data/db
 
-  # server:
-  #   container_name: ${SERVER_CONTAINER_NAME}
-  #   build:  
-  #     context: ./server
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - ${SERVER_CONTAINER_PORT}
-  #   restart: always
-  #   depends_on:
-  #     - database
+  server:
+    container_name: ${SERVER_CONTAINER_NAME}
+    build:  
+      dockerfile: ./server/Dockerfile
+    ports:
+      - ${SERVER_CONTAINER_PORT}
+    restart: always
+    depends_on:
+      - database
