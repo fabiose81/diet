@@ -77,7 +77,7 @@ jobs:
           ECR_REPOSITORY: diet
           IMAGE_TAG: diet-server
         run: |
-          docker build -t ${IMAGE_TAG} ./server
+          docker build -t ${IMAGE_TAG} -f server/Dockerfile .
           docker tag ${IMAGE_TAG}:latest ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
           docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
 
