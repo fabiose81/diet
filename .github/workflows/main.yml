@@ -91,3 +91,31 @@ jobs:
           docker build --build-arg DATABASE=${DATABASE} -t ${IMAGE_TAG} ./mongodb
           docker tag ${IMAGE_TAG}:latest ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
           docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
+
+  aws_cloudformation:
+    name: Deploy to AWS CloudFormation
+    needs: aws_ecr_repository
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-1
+      STACK_NAME: diet-stack
+      TEMPLATE_FILE: ./deploy/aws-cloudformation/diet.yml
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to AWS CloudFormation
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: ${{ env.STACK_NAME }}
+          template: ${{ env.TEMPLATE_FILE }}
+          no-fail-on-empty-changeset: true         

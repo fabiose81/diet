@@ -1,0 +1,380 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ECS Fargate deployment of MongoDB + Python Server with EFS, service discovery, and CloudWatch logs
+
+Parameters:
+  VpcId:
+    Type: String
+    Default: "10.0.0.0/16"
+    Description: CIDR block for the VPC
+  EcrRepository:
+    Type: String
+    Default: diet
+    Description: Name of the ECR repository
+  MongoImageTag:
+    Type: String
+    Default: diet-database-latest
+    Description: MongoDB image tag
+  ServerImageTag:
+    Type: String
+    Default: diet-server-latest
+    Description: Server image tag
+
+Resources:
+
+  ### Create VPC ###
+  MyVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcId
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: diet-vpc
+
+  ### Internet Gateway ###
+  MyIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: diet-igw
+
+  AttachIGW:
+    Type: AWS::EC2::VPCGatewayAttachment
+    DependsOn: MyVPC
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref MyIGW
+
+  ### Public Subnet ###
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn: MyVPC
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: "10.0.1.0/24"
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: diet-public-subnet
+
+  ### Private Subnet ###
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn: MyVPC
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: "10.0.2.0/24"
+      MapPublicIpOnLaunch: false
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: diet-private-subnet
+
+  ### Route Table for Public Subnet ###
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: MyVPC
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: diet-public-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachIGW
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref MyIGW
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PublicRoute
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  ### NAT Gateway for private subnet internet access ###
+  NatEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachIGW
+    Properties:
+      Domain: vpc
+
+  MyNATGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: [NatEIP, PublicSubnet1]
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: diet-nat-gateway
+
+### Private Route Table ###
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: MyVPC
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: diet-private-rt
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    DependsOn: MyNATGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !Ref MyNATGateway
+
+  PrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn: PrivateRoute
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  ### ECS Cluster ###
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: diet-cluster
+
+  ### Service Discovery Namespace ###
+  ServiceDiscoveryNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    DependsOn: MyVPC
+    Properties:
+      Name: local
+      Vpc: !Ref MyVPC
+      Description: Private DNS namespace for ECS service discovery
+
+  ### Security Groups ###
+  ServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: MyVPC
+    Properties:
+      GroupDescription: Allow HTTP access to Python server
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: "0.0.0.0/0"
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: "0.0.0.0/0"
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: MyVPC
+    Properties:
+      GroupDescription: Allow access from Server SG only
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 27017
+          ToPort: 27017
+          SourceSecurityGroupId: !Ref ServerSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: "0.0.0.0/0"
+
+  MongoEFSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: MyVPC
+    Properties:
+      GroupDescription: Allow NFS traffic from MongoDB ECS task
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref DatabaseSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: "0.0.0.0/0"
+
+  ### EFS Volume for MongoDB ###
+  MongoEFS:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+      ThroughputMode: bursting
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_7_DAYS
+      FileSystemTags:
+        - Key: Name
+          Value: diet-mongo-data
+
+  MongoMountTarget:
+    Type: AWS::EFS::MountTarget
+    DependsOn:
+      - PrivateSubnet1
+      - MongoEFSSecurityGroup
+    Properties:
+      FileSystemId: !Ref MongoEFS
+      SubnetId: !Ref PrivateSubnet1
+      SecurityGroups: [!Ref MongoEFSSecurityGroup]
+
+  ### ECS Task Execution Role ###
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  ### CloudWatch Log Groups ###
+  MongoLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/diet-mongo
+      RetentionInDays: 14
+
+  ServerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/diet-server
+      RetentionInDays: 14
+
+  ### MongoDB Task Definition ###
+  MongoTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: diet-mongo
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: mongodb
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepository}:${MongoImageTag}"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 27017
+          MountPoints:
+            - ContainerPath: /data/db
+              SourceVolume: MongoEFSVolume
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref MongoLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: mongodb
+      Volumes:
+        - Name: MongoEFSVolume
+          EFSVolumeConfiguration:
+            FileSystemId: !Ref MongoEFS
+            TransitEncryption: ENABLED
+
+  ### MongoDB Service Discovery ###
+  MongoServiceDiscovery:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: mongodb
+      NamespaceId: !Ref ServiceDiscoveryNamespace
+      DnsConfig:
+        DnsRecords:
+          - Type: A
+            TTL: 60
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+
+  ### MongoDB ECS Service ###
+  MongoService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - MongoMountTarget
+    Properties:
+      Cluster: !Ref ECSCluster
+      ServiceName: mongo-service
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref MongoTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups: [!Ref DatabaseSecurityGroup]
+          Subnets: [!Ref PrivateSubnet1]
+      ServiceRegistries:
+        - RegistryArn: !GetAtt MongoServiceDiscovery.Arn
+
+  ### Python Server Task Definition ###
+  ServerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: diet-server
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: diet-server
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepository}:${ServerImageTag}"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 8000
+          Environment:
+            - Name: DATABASE_HOST
+              Value: mongodb.local
+            - Name: DATABASE_PORT
+              Value: "27017"
+            - Name: DATABASE
+              Value: diet
+            - Name: SERVER_PORT
+              Value: "5000"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ServerLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: server
+
+  ### Python Server ECS Service ###
+  ServerService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - MongoService
+      - MongoMountTarget
+    Properties:
+      Cluster: !Ref ECSCluster
+      ServiceName: server-service
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref ServerTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups: [!Ref ServerSecurityGroup]
+          Subnets: [!Ref PublicSubnet1]
+
+Outputs:
+  ClusterName:
+    Description: Name of ECS Cluster
+    Value: !Ref ECSCluster
+  MongoServiceName:
+    Description: MongoDB ECS Service
+    Value: !Ref MongoService
+  ServerServiceName:
+    Description: Server ECS Service
+    Value: !Ref ServerService
+  ServerPublicAccess:
+    Description: Public IP for Python server (viewable in ECS console)
+    Value: "ECS will assign a public IP automatically"
