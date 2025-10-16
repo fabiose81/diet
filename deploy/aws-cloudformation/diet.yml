@@ -10,10 +10,10 @@ Parameters:
     Type: String
     Default: diet
     Description: Name of the ECR repository
-  # MongoImageTag:
-  #   Type: String
-  #   Default: diet-database-latest
-  #   Description: MongoDB image tag
+  MongoImageTag:
+    Type: String
+    Default: diet-database-latest
+    Description: MongoDB image tag
   ServerImageTag:
     Type: String
     Default: diet-server-latest
@@ -172,57 +172,57 @@ Resources:
           CidrIp: "0.0.0.0/0"
 
   # DatabaseSecurityGroup:
-  #   Type: AWS::EC2::SecurityGroup
-  #   DependsOn: MyVPC
-  #   Properties:
-  #     GroupDescription: Allow access from Server SG only
-  #     VpcId: !Ref MyVPC
-  #     SecurityGroupIngress:
-  #       - IpProtocol: tcp
-  #         FromPort: 27017
-  #         ToPort: 27017
-  #         SourceSecurityGroupId: !Ref ServerSecurityGroup
-  #     SecurityGroupEgress:
-  #       - IpProtocol: -1
-  #         CidrIp: "0.0.0.0/0"
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: MyVPC
+    Properties:
+      GroupDescription: Allow access from Server SG only
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 27017
+          ToPort: 27017
+          SourceSecurityGroupId: !Ref ServerSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: "0.0.0.0/0"
 
   # MongoEFSSecurityGroup:
-  #   Type: AWS::EC2::SecurityGroup
-  #   DependsOn: MyVPC
-  #   Properties:
-  #     GroupDescription: Allow NFS traffic from MongoDB ECS task
-  #     VpcId: !Ref MyVPC
-  #     SecurityGroupIngress:
-  #       - IpProtocol: tcp
-  #         FromPort: 2049
-  #         ToPort: 2049
-  #         SourceSecurityGroupId: !Ref DatabaseSecurityGroup
-  #     SecurityGroupEgress:
-  #       - IpProtocol: -1
-  #         CidrIp: "0.0.0.0/0"
+    Type: AWS::EC2::SecurityGroup
+    DependsOn: MyVPC
+    Properties:
+      GroupDescription: Allow NFS traffic from MongoDB ECS task
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          SourceSecurityGroupId: !Ref DatabaseSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: "0.0.0.0/0"
 
   ### EFS Volume for MongoDB ###
-  # MongoEFS:
-  #   Type: AWS::EFS::FileSystem
-  #   Properties:
-  #     Encrypted: true
-  #     PerformanceMode: generalPurpose
-  #     ThroughputMode: bursting
-  #     LifecyclePolicies:
-  #       - TransitionToIA: AFTER_7_DAYS
-  #     FileSystemTags:
-  #       - Key: Name
-  #         Value: diet-mongo-data
+  MongoEFS:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: true
+      PerformanceMode: generalPurpose
+      ThroughputMode: bursting
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_7_DAYS
+      FileSystemTags:
+        - Key: Name
+          Value: diet-mongo-data
 
   # MongoMountTarget:
-  #   Type: AWS::EFS::MountTarget
-  #   DependsOn:
-  #     - PrivateSubnet1
-  #     - MongoEFSSecurityGroup
-  #   Properties:
-  #     FileSystemId: !Ref MongoEFS
-  #     SubnetId: !Ref PrivateSubnet1
-  #     SecurityGroups: [!Ref MongoEFSSecurityGroup]
+    Type: AWS::EFS::MountTarget
+    DependsOn:
+      - PrivateSubnet1
+      - MongoEFSSecurityGroup
+    Properties:
+      FileSystemId: !Ref MongoEFS
+      SubnetId: !Ref PrivateSubnet1
+      SecurityGroups: [!Ref MongoEFSSecurityGroup]
 
   ### ECS Task Execution Role ###
   TaskExecutionRole:
@@ -240,11 +240,11 @@ Resources:
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
 
   ### CloudWatch Log Groups ###
-  # MongoLogGroup:
-  #   Type: AWS::Logs::LogGroup
-  #   Properties:
-  #     LogGroupName: /ecs/diet-mongo
-  #     RetentionInDays: 14
+  MongoLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/diet-mongo
+      RetentionInDays: 14
 
   ServerLogGroup:
     Type: AWS::Logs::LogGroup
@@ -253,67 +253,67 @@ Resources:
       RetentionInDays: 14
 
   ### MongoDB Task Definition ###
-  # MongoTaskDefinition:
-  #   Type: AWS::ECS::TaskDefinition
-  #   Properties:
-  #     Family: diet-mongo
-  #     Cpu: 512
-  #     Memory: 1024
-  #     NetworkMode: awsvpc
-  #     RequiresCompatibilities: [FARGATE]
-  #     ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
-  #     ContainerDefinitions:
-  #       - Name: mongodb
-  #         Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepository}:${MongoImageTag}"
-  #         Essential: true
-  #         PortMappings:
-  #           - ContainerPort: 27017
-  #         MountPoints:
-  #           - ContainerPath: /data/db
-  #             SourceVolume: MongoEFSVolume
-  #         LogConfiguration:
-  #           LogDriver: awslogs
-  #           Options:
-  #             awslogs-group: !Ref MongoLogGroup
-  #             awslogs-region: !Ref AWS::Region
-  #             awslogs-stream-prefix: mongodb
-  #     Volumes:
-  #       - Name: MongoEFSVolume
-  #         EFSVolumeConfiguration:
-  #           FileSystemId: !Ref MongoEFS
-  #           TransitEncryption: ENABLED
+  MongoTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: diet-mongo
+      Cpu: 512
+      Memory: 1024
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: mongodb
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${EcrRepository}:${MongoImageTag}"
+          Essential: true
+          PortMappings:
+            - ContainerPort: 27017
+          MountPoints:
+            - ContainerPath: /data/db
+              SourceVolume: MongoEFSVolume
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref MongoLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: mongodb
+      Volumes:
+        - Name: MongoEFSVolume
+          EFSVolumeConfiguration:
+            FileSystemId: !Ref MongoEFS
+            TransitEncryption: ENABLED
 
   # ### MongoDB Service Discovery ###
-  # MongoServiceDiscovery:
-  #   Type: AWS::ServiceDiscovery::Service
-  #   Properties:
-  #     Name: mongodb
-  #     NamespaceId: !Ref ServiceDiscoveryNamespace
-  #     DnsConfig:
-  #       DnsRecords:
-  #         - Type: A
-  #           TTL: 60
-  #     HealthCheckCustomConfig:
-  #       FailureThreshold: 1
+  MongoServiceDiscovery:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: mongodb
+      NamespaceId: !Ref ServiceDiscoveryNamespace
+      DnsConfig:
+        DnsRecords:
+          - Type: A
+            TTL: 60
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
 
   # ### MongoDB ECS Service ###
-  # MongoService:
-  #   Type: AWS::ECS::Service
-  #   DependsOn:
-  #     - MongoMountTarget
-  #   Properties:
-  #     Cluster: !Ref ECSCluster
-  #     ServiceName: mongo-service
-  #     LaunchType: FARGATE
-  #     DesiredCount: 1
-  #     TaskDefinition: !Ref MongoTaskDefinition
-  #     NetworkConfiguration:
-  #       AwsvpcConfiguration:
-  #         AssignPublicIp: DISABLED
-  #         SecurityGroups: [!Ref DatabaseSecurityGroup]
-  #         Subnets: [!Ref PrivateSubnet1]
-  #     ServiceRegistries:
-  #       - RegistryArn: !GetAtt MongoServiceDiscovery.Arn
+  MongoService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - MongoMountTarget
+    Properties:
+      Cluster: !Ref ECSCluster
+      ServiceName: mongo-service
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref MongoTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups: [!Ref DatabaseSecurityGroup]
+          Subnets: [!Ref PrivateSubnet1]
+      ServiceRegistries:
+        - RegistryArn: !GetAtt MongoServiceDiscovery.Arn
 
   ### Python Server Task Definition ###
   ServerTaskDefinition:
@@ -350,9 +350,9 @@ Resources:
   ### Python Server ECS Service ###
   ServerService:
     Type: AWS::ECS::Service
-    # DependsOn:
-    #   - MongoService
-    #   - MongoMountTarget
+    DependsOn:
+      - MongoService
+      - MongoMountTarget
     Properties:
       Cluster: !Ref ECSCluster
       ServiceName: server-service
@@ -369,9 +369,9 @@ Outputs:
   ClusterName:
     Description: Name of ECS Cluster
     Value: !Ref ECSCluster
-  # MongoServiceName:
-  #   Description: MongoDB ECS Service
-  #   Value: !Ref MongoService
+  MongoServiceName:
+    Description: MongoDB ECS Service
+    Value: !Ref MongoService
   ServerServiceName:
     Description: Server ECS Service
     Value: !Ref ServerService
