@@ -1,4 +1,4 @@
-name: Test, Build, Create Docker image and Push to AWS ECR Repository
+name: test, build, create Docker image, push to AWS ECR Repository and trigger AWS CloudFormation
 
 on:
   push:
