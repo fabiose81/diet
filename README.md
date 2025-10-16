@@ -1,6 +1,7 @@
 # Diet data recording tool.
 
   ⚙️ : Python
+  🍃MongoDB
   🐳 : Docker
   🧩 : Github Actions
   ☁️ : AWS(ECR / Cloud Formation)
