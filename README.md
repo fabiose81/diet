@@ -24,30 +24,65 @@
 
 #### AddDiet
 
-{
-  "date" : "12-10-2025",
-  "time" : "12:30",
-  "meal" : {
-        "items" : [
-           {
-            "food" : "rice",
-            "amount" : 50,
-            "unit" : "gr",
-            "calories": 150
-           },
-           {
-            "food" : "egg",
-            "amount" : 2,
-            "unit" : "un",
-            "calories": 160
-           },
-            {
-            "food" : "potato",
-            "amount" : 150,
-            "unit" : "gr",
-            "calories": 100
-           }
-        ]
+    {
+        "date" : "12-10-2024",
+        "time" : "12:30",
+        "meal" : {
+            "items" : [
+              {
+              	"food" : "rice",
+			    "amount" : 50,
+			    "unit" : "gr",
+			    "calories": 150
+              },
+              {
+              	"food" : "egg",
+			    "amount" : 2,
+			    "unit" : "un",
+			    "calories": 160
+              },
+              {
+              	"food" : "potato",
+			    "amount" : 150,
+			    "unit" : "gr",
+			    "calories": 100
+              }
+            ]          
+        }
     }
-}
+
+#### GetDiet
+
+    {
+        "id": "68dff00df541bc68d78e785f"
+    }
+
+#### UpdateDiet
+
+    Same json structure but it must to add the id key
+
+    {
+        "id" : "68dff00df541bc68d78e785f"
+        "date" : "12-10-2024",
+        "time" : "12:30",
+        "meal" : {
+            "items" : [
+              {
+              	"food" : "bean",
+			    "amount" : 50,
+			    "unit" : "gr",
+			    "calories": 150
+              }
+              ...
+            ]          
+        }
+    }
+
+#### DeleteDiet
+
+    {
+        "id": "68dff00df541bc68d78e785f"
+    }
+
+
   
