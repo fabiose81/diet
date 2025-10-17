@@ -1,3 +1,11 @@
+# Diet data recording tool.
+
+  ⚙️ : Python
+  🍃MongoDB
+  🐳 : Docker
+  🧩 : Github Actions
+  ☁️ : AWS(ECR / Cloud Formation)
+  
 ## Description
     Python server to persiste diet information into mongodb.
     CRUD teste with Testcontainer by Pytest.
