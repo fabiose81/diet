@@ -51,4 +51,4 @@ if __name__ == '__main__':
     else:
         server = create_server(db)
         server_port = int(os.getenv('SERVER_PORT', 5000))
-        server.run(host="0,0,0,0", port=server_port)
+        server.run(host="0.0.0.0", port=server_port)
