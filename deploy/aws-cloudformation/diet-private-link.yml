@@ -1,8 +1,8 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: ECS Fargate deployment of MongoDB + Python Server with EFS, service discovery, CloudWatch logs, and VPC Endpoints (no NAT Gateway)
+Description: ECS Fargate deployment (us-east-1) of MongoDB + Python Server with EFS, CloudWatch logs, Service Discovery and VPC Endpoints (no NAT Gateway)
 
 Parameters:
-  VpcId:
+  VpcCidr:
     Type: String
     Default: "10.0.0.0/16"
     Description: CIDR block for the VPC
@@ -21,11 +21,14 @@ Parameters:
 
 Resources:
 
-  ### --- VPC & Networking --- ###
+  ########################
+  # VPC & NETWORKING
+  ########################
+
   MyVPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: !Ref VpcId
+      CidrBlock: !Ref VpcCidr
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
@@ -45,6 +48,7 @@ Resources:
       VpcId: !Ref MyVPC
       InternetGatewayId: !Ref MyIGW
 
+  # Public subnet (for Python server tasks with public IP)
   PublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -56,6 +60,7 @@ Resources:
         - Key: Name
           Value: diet-public-subnet
 
+  # Private subnet (for MongoDB + EFS + endpoints)
   PrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -67,7 +72,10 @@ Resources:
         - Key: Name
           Value: diet-private-subnet
 
-  ### --- Route Tables --- ###
+  ########################
+  # Route Tables
+  ########################
+
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -103,60 +111,10 @@ Resources:
       SubnetId: !Ref PrivateSubnet1
       RouteTableId: !Ref PrivateRouteTable
 
-  ### --- VPC Endpoints (PrivateLink) --- ###
-  ECRApiEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.api"
-      VpcId: !Ref MyVPC
-      SubnetIds: [!Ref PrivateSubnet1]
-      SecurityGroupIds: [!Ref DatabaseSecurityGroup]
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
+  ########################
+  # SECURITY GROUPS
+  ########################
 
-  ECRDkrEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.dkr"
-      VpcId: !Ref MyVPC
-      SubnetIds: [!Ref PrivateSubnet1]
-      SecurityGroupIds: [!Ref DatabaseSecurityGroup]
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-
-  CloudWatchLogsEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.logs"
-      VpcId: !Ref MyVPC
-      SubnetIds: [!Ref PrivateSubnet1]
-      SecurityGroupIds: [!Ref DatabaseSecurityGroup]
-      VpcEndpointType: Interface
-      PrivateDnsEnabled: true
-
-  S3GatewayEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
-      VpcId: !Ref MyVPC
-      RouteTableIds: [!Ref PrivateRouteTable]
-      VpcEndpointType: Gateway
-
-  ### --- ECS Cluster --- ###
-  ECSCluster:
-    Type: AWS::ECS::Cluster
-    Properties:
-      ClusterName: diet-cluster
-
-  ### --- Service Discovery --- ###
-  ServiceDiscoveryNamespace:
-    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
-    Properties:
-      Name: local
-      Vpc: !Ref MyVPC
-      Description: Private DNS namespace for ECS service discovery
-
-  ### --- Security Groups --- ###
   ServerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -170,11 +128,14 @@ Resources:
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: Name
+          Value: diet-server-sg
 
   DatabaseSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow MongoDB from Server SG only
+      GroupDescription: Allow MongoDB access from Server SG only
       VpcId: !Ref MyVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -184,11 +145,14 @@ Resources:
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: Name
+          Value: diet-db-sg
 
   MongoEFSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow NFS from MongoDB ECS task
+      GroupDescription: Allow NFS (2049) from Database SG
       VpcId: !Ref MyVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -198,8 +162,97 @@ Resources:
       SecurityGroupEgress:
         - IpProtocol: -1
           CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: Name
+          Value: diet-efs-sg
 
-  ### --- EFS for MongoDB --- ###
+  # Security group for VPC Interface Endpoints — allow inbound TLS from VPC (private subnet)
+  EndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for VPC Interface Endpoints (allow ECS tasks to connect)
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref VpcCidr
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: "0.0.0.0/0"
+      Tags:
+        - Key: Name
+          Value: diet-endpoint-sg
+
+  ########################
+  # VPC ENDPOINTS (PrivateLink) - no NAT
+  ########################
+
+  # ECR API (GetAuthorizationToken) - Interface endpoint
+  EcrApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.api"
+      VpcId: !Ref MyVPC
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnet1
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: diet-ecr-api-endpoint
+
+  # ECR DKR (pull image layers) - Interface endpoint
+  EcrDkrEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ecr.dkr"
+      VpcId: !Ref MyVPC
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnet1
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: diet-ecr-dkr-endpoint
+
+  # CloudWatch Logs endpoint (so tasks in private subnet can send logs) - Interface endpoint
+  CloudWatchLogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.logs"
+      VpcId: !Ref MyVPC
+      VpcEndpointType: Interface
+      SubnetIds:
+        - !Ref PrivateSubnet1
+      SecurityGroupIds:
+        - !Ref EndpointSecurityGroup
+      PrivateDnsEnabled: true
+      Tags:
+        - Key: Name
+          Value: diet-cwlogs-endpoint
+
+  # S3 Gateway endpoint (ECR uses S3 internally; required to pull images)
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcId: !Ref MyVPC
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+      VpcEndpointType: Gateway
+      Tags:
+        - Key: Name
+          Value: diet-s3-endpoint
+
+  ########################
+  # EFS for MongoDB
+  ########################
+
   MongoEFS:
     Type: AWS::EFS::FileSystem
     Properties:
@@ -217,9 +270,18 @@ Resources:
     Properties:
       FileSystemId: !Ref MongoEFS
       SubnetId: !Ref PrivateSubnet1
-      SecurityGroups: [!Ref MongoEFSSecurityGroup]
+      SecurityGroups:
+        - !Ref MongoEFSSecurityGroup
 
-  ### --- IAM Role --- ###
+  ########################
+  # ECS Cluster, IAM Role, Log Groups
+  ########################
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: diet-cluster
+
   TaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -234,7 +296,6 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
         - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
 
-  ### --- CloudWatch Log Groups --- ###
   MongoLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -247,7 +308,21 @@ Resources:
       LogGroupName: /ecs/diet-server
       RetentionInDays: 14
 
-  ### --- MongoDB Task Definition --- ###
+  ########################
+  # Service Discovery Namespace
+  ########################
+
+  ServiceDiscoveryNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: local
+      Vpc: !Ref MyVPC
+      Description: Private DNS namespace for ECS service discovery
+
+  ########################
+  # MongoDB Task Definition & Service (in private subnet)
+  ########################
+
   MongoTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -302,12 +377,17 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: DISABLED
-          SecurityGroups: [!Ref DatabaseSecurityGroup]
-          Subnets: [!Ref PrivateSubnet1]
+          SecurityGroups:
+            - !Ref DatabaseSecurityGroup
+          Subnets:
+            - !Ref PrivateSubnet1
       ServiceRegistries:
         - RegistryArn: !GetAtt MongoServiceDiscovery.Arn
 
-  ### --- Python Server Task --- ###
+  ########################
+  # Python Server Task Definition & Service (public subnet)
+  ########################
+
   ServerTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -353,8 +433,10 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
-          SecurityGroups: [!Ref ServerSecurityGroup]
-          Subnets: [!Ref PublicSubnet1]
+          SecurityGroups:
+            - !Ref ServerSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet1
 
 Outputs:
   ClusterName:
@@ -367,5 +449,5 @@ Outputs:
     Description: Python Server ECS Service
     Value: !Ref ServerService
   ServerPublicAccess:
-    Description: Public IP for Python server (viewable in ECS console)
-    Value: "ECS assigns a public IP automatically"
+    Description: Info
+    Value: "Public IP assigned to Python server task (see Service ENI in ECS console)"
