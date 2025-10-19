@@ -73,24 +73,26 @@ jobs:
 
       - name: Build, tag, and push python Docker image to Amazon ECR
         env:
-          ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          ECR_REGISTRY_PRIVATE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          ECR_REGISTRY_PUBLIC: public.ecr.aws/${{ secrets.AWS_CODE_PUBLIC_REPOSITORY}}
           ECR_REPOSITORY: diet
           IMAGE_TAG: diet-server
         run: |
           docker build -t ${IMAGE_TAG} -f server/Dockerfile .
-          docker tag ${IMAGE_TAG}:latest ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
-          docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
+          docker tag ${IMAGE_TAG}:latest ${ECR_REGISTRY_PUBLIC}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
+          docker push ${ECR_REGISTRY_PUBLIC}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
 
       - name: Build, tag, and push mongodb Docker image to Amazon ECR
         env:
-          ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          ECR_REGISTRY_PRIVATE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+          ECR_REGISTRY_PUBLIC: public.ecr.aws/${{ secrets.AWS_CODE_PUBLIC_REPOSITORY}}
           ECR_REPOSITORY: diet
           IMAGE_TAG: diet-database
           DATABASE: diet
         run: |
           docker build --build-arg DATABASE=${DATABASE} -t ${IMAGE_TAG} ./mongodb
-          docker tag ${IMAGE_TAG}:latest ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
-          docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
+          docker tag ${IMAGE_TAG}:latest ${ECR_REGISTRY_PUBLIC}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
+          docker push ${ECR_REGISTRY_PUBLIC}/${ECR_REPOSITORY}:${IMAGE_TAG}-latest
 
   aws_cloudformation:
     name: Deploy to AWS CloudFormation
@@ -100,7 +102,7 @@ jobs:
     env:
       AWS_REGION: us-east-1
       STACK_NAME: diet-stack
-      TEMPLATE_FILE: ./deploy/aws-cloudformation/diet.yml
+      TEMPLATE_FILE: ./deploy/aws-cloudformation/diet-private-link.yml
 
     steps:
       - name: Checkout code
