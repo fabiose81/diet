@@ -1,28 +1,3 @@
-name: Scheduled Job (Montreal 18:00)
-
-on:
-  schedule:
-    - cron: '28 8 * * *'  
-    - cron: '28 8 * * *' 
-  workflow_dispatch:
-
-jobs:
-  run-job:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check Montreal time
-        id: check_time
-        run: |
-          HOUR=$(TZ="America/Montreal" date +'%H')
-          if [ "$HOUR" != "18" ]; then
-            echo "Not 18h Montreal time. Exiting."
-            exit 1
-          fi
-
-      - name: Run actual job
-        run: |
-          echo "Running job at 18:00 Montreal time"
-
 # name: test, build, create Docker image, push to AWS ECR Repository and trigger AWS CloudFormation
 
 # on:
