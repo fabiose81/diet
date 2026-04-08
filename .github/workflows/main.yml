@@ -3,13 +3,19 @@ name: test inputs
 on:
   workflow_dispatch: 
     inputs:
-      apps:
-        description: "Apps"
+      app-1:
+        description: "App 1"
         required: false
-        default: |
-          app-1
-          app-2
-          app-3
+        type: boolean
+      app-2:
+        description: "App 2"
+        required: false
+        type: boolean
+      app-3:
+        description: "App 3"
+        required: false
+        type: boolean
+   
 
 permissions: write-all
 
