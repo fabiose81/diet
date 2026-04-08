@@ -20,13 +20,34 @@ on:
 permissions: write-all
 
 jobs:
-   all:
+   build-app-list:
+     runs-on: ubuntu-latest
+     outputs:
+       apps: ${{ steps.set.outputs.apps }}
+     steps:
+       - id: set
+         shell: bash
+         run: |
+           apps=()
+
+           [[ "${{ inputs.app-1 }}" == true ]] && apps+=("App 1")
+           [[ "${{ inputs.app-2 }}" == true ]] && apps+=("App 2")
+           [[ "${{ inputs.app-3 }}" == true ]] && apps+=("App 3")
+
+           printf -v joined "%s\n" "${apps[@]}"
+           echo "apps<<EOF" >> "$GITHUB_OUTPUT"
+           echo "$joined" >> "$GITHUB_OUTPUT"
+           echo "EOF" >> "$GITHUB_OUTPUT"
+   start:
+     needs: build-app-list
      if: ${{ github.event_name == 'workflow_dispatch' }}
 
      runs-on: ubuntu-latest
      steps:
        - name: all
-         run: echo "Run all!"
+         run: echo "${{ needs.build-app-list.outputs.apps }}"
+
+    
 
     
 # name: test, build, create Docker image, push to AWS ECR Repository and trigger AWS CloudFormation
