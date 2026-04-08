@@ -1,3 +1,28 @@
+name: test inputs
+
+on:
+  workflow_dispatch: 
+    inputs:
+      apps:
+        description: "Apps"
+        required: false
+        default: |
+          app-1
+          app-2
+          app-3
+
+permissions: write-all
+
+jobs:
+   all:
+     if: ${{ github.event_name == 'workflow_dispatch' }}
+
+     runs-on: ubuntu-latest
+     steps:
+       - name: all
+         run: echo "Run all!"
+
+    
 # name: test, build, create Docker image, push to AWS ECR Repository and trigger AWS CloudFormation
 
 # on:
